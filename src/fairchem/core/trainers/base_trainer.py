@@ -884,7 +884,7 @@ class BaseTrainer(ABC):
             disable=disable_tqdm,
         ):
             # Forward.
-            with torch.cuda.amp.autocast(enabled=self.scaler is not None):
+            with torch.amp.autocast('cuda', enabled=self.scaler is not None):
                 batch.to(self.device)
                 out = self._forward(batch)
             loss = self._compute_loss(out, batch)

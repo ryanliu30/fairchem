@@ -371,7 +371,7 @@ class DenoisingForcesTrainer(EquiformerV2ForcesTrainer):
                         )
 
                 # Forward, loss, backward.
-                with torch.cuda.amp.autocast(enabled=self.scaler is not None):
+                with torch.amp.autocast('cuda', enabled=self.scaler is not None):
                     out = self._forward(batch)
                     loss = self._compute_loss(out, batch)
 
@@ -752,7 +752,7 @@ class DenoisingForcesTrainer(EquiformerV2ForcesTrainer):
             desc=f"device {rank}",
             disable=disable_tqdm,
         ):
-            with torch.cuda.amp.autocast(enabled=self.scaler is not None):
+            with torch.amp.autocast('cuda', enabled=self.scaler is not None):
                 out = self._forward(batch)
 
             for key in out:

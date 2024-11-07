@@ -152,7 +152,7 @@ class OCPTrainer(BaseTrainer):
                 # Get a batch.
                 batch = next(train_loader_iter)
                 # Forward, loss, backward.
-                with torch.cuda.amp.autocast(enabled=self.scaler is not None):
+                with torch.amp.autocast('cuda', enabled=self.scaler is not None):
                     out = self._forward(batch)
                     loss = self._compute_loss(out, batch)
 
@@ -460,7 +460,7 @@ class OCPTrainer(BaseTrainer):
             desc=f"device {rank}",
             disable=disable_tqdm,
         ):
-            with torch.cuda.amp.autocast(enabled=self.scaler is not None):
+            with torch.amp.autocast('cuda', enabled=self.scaler is not None):
                 out = self._forward(batch)
 
             for target_key in self.config["outputs"]:
