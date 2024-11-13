@@ -202,7 +202,7 @@ class BaseTrainer(ABC):
             os.makedirs(self.config["cmd"]["logs_dir"], exist_ok=True)
 
         ### backwards compatability with OCP v<2.0
-        self.config = update_config(self.config)
+        # self.config = update_config(self.config)
 
         if distutils.is_master():
             logging.info(yaml.dump(self.config, default_flow_style=False))
