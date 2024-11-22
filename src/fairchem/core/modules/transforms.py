@@ -40,6 +40,11 @@ def convert_stress(data_object, config) -> Data:
     data_object.stress *= - 0.0062415091258833
     return data_object
 
+def spicev2(data_object, config) -> Data:
+    data_object.fixed = torch.zeros_like(data_object.atomic_numbers, dtype=torch.float)
+    data_object.cell = torch.zeros(1, 3, 3, device=data_object.pos.device)
+    return data_object
+
 def decompose_tensor(data_object, config) -> Data:
     tensor_key = config["tensor"]
     rank = config["rank"]
