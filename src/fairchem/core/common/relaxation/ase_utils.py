@@ -202,9 +202,6 @@ class OCPCalculator(Calculator):
         # Calculate the edge indices on the fly
         config["model"]["otf_graph"] = True
 
-        ### backwards compatability with OCP v<2.0
-        config = update_config(config)
-
         self.config = copy.deepcopy(config)
         self.config["checkpoint"] = str(checkpoint_path)
         del config["dataset"]["src"]
@@ -242,7 +239,7 @@ class OCPCalculator(Calculator):
             r_forces=False,
             r_distances=False,
             r_pbc=True,
-            r_edges=not self.trainer.model.otf_graph,  # otf graph should not be a property of the model...
+            r_edges=False,  # otf graph should not be a property of the model...
         )
         self.implemented_properties = list(self.config["outputs"].keys())
 
