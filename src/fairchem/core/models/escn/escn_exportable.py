@@ -207,7 +207,7 @@ class eSCN(nn.Module, GraphModelMixin):
         # _Jd is a list of tensors of shape (2l+1, 2l+1)
         # TODO: we should probably just bake this into the file as strings to avoid
         # carrying this extra file around
-        Jd_list = torch.load(os.path.join(os.path.dirname(__file__), "Jd.pt"))
+        Jd_list = torch.load(os.path.join(os.path.dirname(__file__), "Jd.pt"), weights_only=True)
         for l in range(self.lmax + 1):
             self.register_buffer(f"Jd_{l}", Jd_list[l])
 

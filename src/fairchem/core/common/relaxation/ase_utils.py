@@ -187,7 +187,9 @@ class OCPCalculator(Calculator):
                 config["dataset"] = config["dataset"].get("train", None)
         else:
             # Loads the config from the checkpoint directly (always on CPU).
-            checkpoint = torch.load(checkpoint_path, map_location=torch.device("cpu"))
+            checkpoint = torch.load(
+                checkpoint_path, map_location=torch.device("cpu"), weights_only=True
+            )
             config = checkpoint["config"]
 
         if trainer is not None:
