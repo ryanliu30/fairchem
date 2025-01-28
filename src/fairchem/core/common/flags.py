@@ -88,6 +88,9 @@ class Flags:
             "--summit", action="store_true", help="Running on Summit cluster"
         )
         self.parser.add_argument(
+            "--nersc", action="store_true", help="Running on NERSC cluster"
+        )
+        self.parser.add_argument(
             "--logdir", default="logs", type=Path, help="Where to store logs"
         )
         self.parser.add_argument(
