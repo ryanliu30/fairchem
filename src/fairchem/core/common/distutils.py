@@ -20,7 +20,7 @@ from torch.distributed.elastic.utils.distributed import get_free_port
 from fairchem.core.common.typing import none_throws
 
 T = TypeVar("T")
-DISTRIBUTED_PORT = 13356
+DISTRIBUTED_PORT = os.environ["TORCH_DISTRIBUTED_PORT"] if "TORCH_DISTRIBUTED_PORT" in os.environ else 13356
 CURRENT_DEVICE_STR = "CURRRENT_DEVICE"
 
 
