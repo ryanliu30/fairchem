@@ -495,7 +495,7 @@ class OCPTrainer(BaseTrainer):
                     ### Split predictions into per-image predictions
                     if self.config["outputs"][target_key]["level"] == "atom":
                         batch_natoms = batch.natoms
-                        batch_fixed = batch.fixed
+                        batch_fixed = batch.fixed if "fixed" in batch else torch.zeros_like(batch.atomic_numbers)
                         per_image_pred = torch.split(pred, batch_natoms.tolist())
 
                         ### Save out only free atom, EvalAI does not need fixed atoms
@@ -632,6 +632,8 @@ class OCPTrainer(BaseTrainer):
                 ids += systemids
 
             if split == "val":
+                if "fixed" not in relaxed_batch:
+                    relaxed_batch.fixed = torch.zeros_like(relaxed_batch.atomic_numbers)
                 mask = relaxed_batch.fixed == 0
                 s_idx = 0
                 natoms_free = []
