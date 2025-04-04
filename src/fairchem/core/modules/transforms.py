@@ -66,5 +66,5 @@ def convert_kbar_to_eV(data_object, config) -> Data:
     Convert kbar to eV/Å^2
     """
     if config:
-        data_object.stress = 0.0062415091 * data_object.stress.view(-1, 3, 3)
+        data_object.stress = - 0.0062415091 * data_object.stress.view(-1, 3, 3)
     return data_object
