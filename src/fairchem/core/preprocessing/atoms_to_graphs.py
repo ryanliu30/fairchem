@@ -134,7 +134,12 @@ class AtomsToGraphs:
         """Stack center and neighbor index and reshapes distances,
         takes in np.arrays and returns torch tensors"""
         edge_index = torch.LongTensor(np.vstack((n_index, c_index)))
-        edge_distances = torch.FloatTensor(n_distance)
+        if torch.get_default_dtype() == torch.float64:
+            edge_distances = torch.DoubleTensor(n_distance)
+        elif torch.get_default_dtype() == torch.float32:
+            edge_distances = torch.FloatTensor(n_distance)
+        elif torch.get_default_dtype() == torch.float16:
+            edge_distances = torch.HalfTensor(n_distance)
         cell_offsets = torch.LongTensor(offsets)
 
         # remove distances smaller than a tolerance ~ 0. The small tolerance is
@@ -186,8 +191,8 @@ class AtomsToGraphs:
         positions = wrap_positions(positions, cell, pbc=pbc, eps=0)
 
         atomic_numbers = torch.Tensor(atoms.get_atomic_numbers())
-        positions = torch.from_numpy(positions).float()
-        cell = torch.from_numpy(cell).view(1, 3, 3).float()
+        positions = torch.from_numpy(positions).to(torch.get_default_dtype())
+        cell = torch.from_numpy(cell).view(1, 3, 3).to(torch.get_default_dtype())
         natoms = positions.shape[0]
 
         # initialized to torch.zeros(natoms) if tags missing.

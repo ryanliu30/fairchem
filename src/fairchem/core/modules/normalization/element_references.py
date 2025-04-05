@@ -71,12 +71,12 @@ class LinearReferences(nn.Module):
         indices = batch.atomic_numbers.to(
             dtype=torch.int, device=self.element_references.device
         )
-        elemrefs = self.element_references[indices].to(dtype=target.dtype)
+        elemrefs = self.element_references[indices].to(dtype=torch.float64)
         # this option should not exist, all tensors should have compatible shapes in dataset and trainer outputs
         if reshaped:
             elemrefs = elemrefs.view(batch.natoms.sum(), -1)
 
-        return target.index_add(0, batch.batch, elemrefs, alpha=sign)
+        return target.to(dtype=torch.float64).index_add(0, batch.batch, elemrefs, alpha=sign).to(target.dtype)
 
     @torch.autocast(device_type="cuda", enabled=False)
     def dereference(
