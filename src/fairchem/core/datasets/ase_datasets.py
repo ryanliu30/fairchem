@@ -26,6 +26,7 @@ from tqdm import tqdm
 from fairchem.core.common.registry import registry
 from fairchem.core.datasets._utils import rename_data_object_keys
 from fairchem.core.datasets.base_dataset import BaseDataset
+from fairchem.core.datasets.lmdb_database import LMDBDatabase
 from fairchem.core.datasets.target_metadata_guesser import guess_property_metadata
 from fairchem.core.modules.transforms import DataTransforms
 from fairchem.core.preprocessing import AtomsToGraphs
@@ -134,11 +135,11 @@ class AseAtomsDataset(BaseDataset, ABC):
         if self.a2g.r_energy is True and self.lin_ref is not None:
             data_object.energy -= sum(self.lin_ref[data_object.atomic_numbers.long()])
 
-        # Transform data object
-        data_object = self.transforms(data_object)
-
         if self.key_mapping is not None:
             data_object = rename_data_object_keys(data_object, self.key_mapping)
+
+        # Transform data object
+        data_object = self.transforms(data_object)
 
         if self.config.get("include_relaxed_energy", False):
             data_object.energy_relaxed = self.get_relaxed_energy(self.ids[idx])
@@ -470,9 +471,9 @@ class AseDBDataset(AseAtomsDataset):
     def _load_dataset_get_ids(self, config: dict) -> list[int]:
         if isinstance(config["src"], list):
             filepaths = []
-            for path in sorted(config["src"]):
+            for path in config["src"]:
                 if os.path.isdir(path):
-                    filepaths.extend(sorted(glob(f"{path}/*")))
+                    filepaths.extend(glob(f"{path}/*"))
                 elif os.path.isfile(path):
                     filepaths.append(path)
                 else:
@@ -480,20 +481,15 @@ class AseDBDataset(AseAtomsDataset):
         elif os.path.isfile(config["src"]):
             filepaths = [config["src"]]
         elif os.path.isdir(config["src"]):
-            filepaths = sorted(glob(f'{config["src"]}/*'))
+            filepaths = glob(f'{config["src"]}/*')
         else:
-            filepaths = sorted(glob(config["src"]))
+            filepaths = glob(config["src"])
 
         self.dbs = []
 
-        for path in filepaths:
+        for path in sorted(filepaths):
             try:
-                self.dbs.append(
-                    self.connect_db(
-                        path,
-                        config.get("connect_args", {}),
-                    )
-                )
+                self.dbs.append(self.connect_db(path, config.get("connect_args", {})))
             except ValueError:
                 logging.debug(
                     f"Tried to connect to {path} but it's not an ASE database!"
@@ -553,11 +549,12 @@ class AseDBDataset(AseAtomsDataset):
     ) -> ase.db.core.Database:
         if connect_args is None:
             connect_args = {}
-
-        # If we're using an aselmdb, let's set readonly=True to be safe!
-        if "aselmdb" in address:
-            connect_args["readonly"] = True
-            connect_args["use_lock_file"] = False
+        db_type = connect_args.get("type", "extract_from_name")
+        if db_type in ("lmdb", "aselmdb") or (
+            db_type == "extract_from_name"
+            and str(address).rsplit(".", maxsplit=1)[-1] in ("lmdb", "aselmdb")
+        ):
+            return LMDBDatabase(address, readonly=True, **connect_args)
 
         return ase.db.connect(address, **connect_args)
 

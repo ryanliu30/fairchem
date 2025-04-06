@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import (
     TYPE_CHECKING,
     Any,
+    NamedTuple,
     TypeVar,
 )
 
@@ -31,6 +32,10 @@ if TYPE_CHECKING:
 
 
 T_co = TypeVar("T_co", covariant=True)
+
+
+class DatasetMetadata(NamedTuple):
+    natoms: ArrayLike | None = None
 
 
 class UnsupportedDatasetError(ValueError):
@@ -53,7 +58,7 @@ class BaseDataset(Dataset[T_co], metaclass=ABCMeta):
             if isinstance(config["src"], str):
                 self.paths = [Path(self.config["src"])]
             else:
-                self.paths = tuple(Path(path) for path in sorted(config["src"]))
+                self.paths = tuple(Path(path) for path in config["src"])
 
         self.lin_ref = None
         if self.config.get("lin_ref", False):
@@ -66,14 +71,16 @@ class BaseDataset(Dataset[T_co], metaclass=ABCMeta):
         return self.num_samples
 
     def metadata_hasattr(self, attr) -> bool:
-        return attr in self._metadata
+        if self._metadata is None:
+            return False
+        return hasattr(self._metadata, attr)
 
     @cached_property
     def indices(self):
         return np.arange(self.num_samples, dtype=int)
 
     @cached_property
-    def _metadata(self) -> dict[str, ArrayLike]:
+    def _metadata(self) -> DatasetMetadata:
         # logic to read metadata file here
         metadata_npzs = []
         if self.config.get("metadata_path", None) is not None:
@@ -94,25 +101,26 @@ class BaseDataset(Dataset[T_co], metaclass=ABCMeta):
             logging.warning(
                 f"Could not find dataset metadata.npz files in '{self.paths}'"
             )
-            return {}
+            return None
 
-        metadata = {
-            field: np.concatenate([metadata[field] for metadata in metadata_npzs])
-            for field in metadata_npzs[0]
-        }
-
+        metadata = DatasetMetadata(
+            **{
+                field: np.concatenate([metadata[field] for metadata in metadata_npzs])
+                for field in DatasetMetadata._fields
+            }
+        )
         assert np.issubdtype(
-            metadata["natoms"].dtype, np.integer
-        ), f"Metadata natoms must be an integer type! not {metadata['natoms'].dtype}"
-        assert metadata["natoms"].shape[0] == len(
+            metadata.natoms.dtype, np.integer
+        ), f"Metadata natoms must be an integer type! not {metadata.natoms.dtype}"
+        assert metadata.natoms.shape[0] == len(
             self
         ), "Loaded metadata and dataset size mismatch."
 
         return metadata
 
     def get_metadata(self, attr, idx):
-        if attr in self._metadata:
-            metadata_attr = self._metadata[attr]
+        if self._metadata is not None:
+            metadata_attr = getattr(self._metadata, attr)
             if isinstance(idx, list):
                 return [metadata_attr[_idx] for _idx in idx]
             return metadata_attr[idx]
@@ -126,7 +134,7 @@ class Subset(Subset_, BaseDataset):
         self,
         dataset: BaseDataset,
         indices: Sequence[int],
-        metadata: dict[str, ArrayLike],
+        metadata: DatasetMetadata | None = None,
     ) -> None:
         super().__init__(dataset, indices)
         self.metadata = metadata
@@ -135,7 +143,7 @@ class Subset(Subset_, BaseDataset):
         self.config = dataset.config
 
     @cached_property
-    def _metadata(self) -> dict[str, ArrayLike]:
+    def _metadata(self) -> DatasetMetadata:
         return self.dataset._metadata
 
     def get_metadata(self, attr, idx):
@@ -175,7 +183,6 @@ def create_dataset(config: dict[str, Any], split: str) -> Subset:
     g.manual_seed(seed)
 
     dataset = dataset_cls(current_split_config)
-
     # Get indices of the dataset
     indices = dataset.indices
     max_atoms = current_split_config.get("max_atoms", None)
@@ -183,25 +190,6 @@ def create_dataset(config: dict[str, Any], split: str) -> Subset:
         if not dataset.metadata_hasattr("natoms"):
             raise ValueError("Cannot use max_atoms without dataset metadata")
         indices = indices[dataset.get_metadata("natoms", indices) <= max_atoms]
-
-    for subset_to in current_split_config.get("subset_to", []):
-        if not dataset.metadata_hasattr(subset_to["metadata_key"]):
-            raise ValueError(
-                f"Cannot use {subset_to} without dataset metadata key {subset_to['metadata_key']}"
-            )
-        rhv = subset_to["rhv"]
-        if isinstance(rhv, str):
-            with open(rhv) as f:
-                rhv = f.read().splitlines()
-                rhv = [int(x) for x in rhv]
-        if subset_to["op"] == "abs_le":
-            indices = indices[
-                np.abs(dataset.get_metadata(subset_to["metadata_key"], indices)) <= rhv
-            ]
-        elif subset_to["op"] == "in":
-            indices = indices[
-                np.isin(dataset.get_metadata(subset_to["metadata_key"], indices), rhv)
-            ]
 
     # Apply dataset level transforms
     # TODO is no_shuffle mutually exclusive though? or what is the purpose of no_shuffle?
@@ -220,17 +208,11 @@ def create_dataset(config: dict[str, Any], split: str) -> Subset:
         # shuffle all datasets by default to avoid biasing the sampling in concat dataset
         # TODO only shuffle if split is train
         max_index = sample_n
-        indices = (
-            indices
-            if len(indices) == 1
-            else indices[randperm(len(indices), generator=g)]
-        )
+        indices = indices[randperm(len(indices), generator=g)]
     else:
         max_index = len(indices)
         indices = (
-            indices
-            if (no_shuffle or len(indices) == 1)
-            else indices[randperm(len(indices), generator=g)]
+            indices if no_shuffle else indices[randperm(len(indices), generator=g)]
         )
 
     if max_index > len(indices):

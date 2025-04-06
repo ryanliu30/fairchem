@@ -34,7 +34,17 @@ class DataTransforms:
             data_object = eval(transform_fn)(data_object, self.config[transform_fn])
 
         return data_object
+    
 
+def reshape_stress(data_object, config) -> Data:
+    if config:
+        data_object.stress = data_object.stress.view(1, 3, 3)
+    return data_object
+
+def append_fixed(data_object, config) -> Data:
+    if config:
+        data_object.fixed = torch.zeros_like(data_object.atomic_numbers)
+    return data_object
 
 def decompose_tensor(data_object, config) -> Data:
     tensor_key = config["tensor"]
@@ -59,12 +69,4 @@ def decompose_tensor(data_object, config) -> Data:
             max(0, irreps_sum(irrep_dim - 1)) : irreps_sum(irrep_dim),
         ]
 
-    return data_object
-
-def convert_kbar_to_eV(data_object, config) -> Data:
-    """
-    Convert kbar to eV/Å^2
-    """
-    if config:
-        data_object.stress = - 0.0062415091 * data_object.stress.view(-1, 3, 3)
     return data_object
