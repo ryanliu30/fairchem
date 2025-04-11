@@ -138,12 +138,7 @@ class AtomsToGraphs:
         """Stack center and neighbor index and reshapes distances,
         takes in np.arrays and returns torch tensors"""
         edge_index = torch.LongTensor(np.vstack((n_index, c_index)))
-        if torch.get_default_dtype() == torch.float64:
-            edge_distances = torch.DoubleTensor(n_distance)
-        elif torch.get_default_dtype() == torch.float32:
-            edge_distances = torch.FloatTensor(n_distance)
-        elif torch.get_default_dtype() == torch.float16:
-            edge_distances = torch.HalfTensor(n_distance)
+        edge_distances = torch.FloatTensor(n_distance)
         cell_offsets = torch.LongTensor(offsets)
 
         # remove distances smaller than a tolerance ~ 0. The small tolerance is
@@ -208,8 +203,8 @@ class AtomsToGraphs:
             atoms_copy.set_positions(positions)
 
         atomic_numbers = torch.tensor(atoms.get_atomic_numbers(), dtype=torch.uint8)
-        positions = torch.from_numpy(positions).to(torch.get_default_dtype())
-        cell = torch.from_numpy(cell).view(1, 3, 3).to(torch.get_default_dtype())
+        positions = torch.from_numpy(positions).float()
+        cell = torch.from_numpy(cell).view(1, 3, 3).float()
         natoms = positions.shape[0]
 
         # initialized to torch.zeros(natoms) if tags missing.
@@ -250,13 +245,13 @@ class AtomsToGraphs:
             data.energy = energy
         if self.r_forces:
             forces = torch.tensor(
-                atoms.get_forces(apply_constraint=False), dtype=torch.get_default_dtype()
+                atoms.get_forces(apply_constraint=False), dtype=torch.float32
             )
             data.forces = forces
         if self.r_stress:
             stress = torch.tensor(
                 atoms.get_stress(apply_constraint=False, voigt=False),
-                dtype=torch.get_default_dtype(),
+                dtype=torch.float32,
             )
             data.stress = stress
         if self.r_distances and self.r_edges:
