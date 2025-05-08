@@ -138,7 +138,16 @@ class AtomsToGraphs:
         """Stack center and neighbor index and reshapes distances,
         takes in np.arrays and returns torch tensors"""
         edge_index = torch.LongTensor(np.vstack((n_index, c_index)))
-        edge_distances = torch.FloatTensor(n_distance)
+        if torch.get_default_dtype() == torch.float64:
+            edge_distances = torch.DoubleTensor(n_distance)
+        elif torch.get_default_dtype() == torch.float32:
+            edge_distances = torch.FloatTensor(n_distance)
+        elif torch.get_default_dtype() == torch.float16:
+            edge_distances = torch.HalfTensor(n_distance)
+        else:
+            raise RuntimeError(
+                f"Unsupported default dtype: {torch.get_default_dtype()}"
+            )
         cell_offsets = torch.LongTensor(offsets)
 
         # remove distances smaller than a tolerance ~ 0. The small tolerance is
@@ -163,7 +172,7 @@ class AtomsToGraphs:
 
         # correct for pbc
         cell = torch.repeat_interleave(cell, edge_index.shape[1], dim=0)
-        offsets = cell_offsets.float().view(-1, 1, 3).bmm(cell.float()).view(-1, 3)
+        offsets = cell_offsets.to(torch.get_default_dtype()).view(-1, 1, 3).bmm(cell.to(torch.get_default_dtype())).view(-1, 3)
         distance_vectors += offsets
 
         return distance_vectors
@@ -203,8 +212,8 @@ class AtomsToGraphs:
             atoms_copy.set_positions(positions)
 
         atomic_numbers = torch.tensor(atoms.get_atomic_numbers(), dtype=torch.uint8)
-        positions = torch.from_numpy(positions).float()
-        cell = torch.from_numpy(cell).view(1, 3, 3).float()
+        positions = torch.from_numpy(positions).to(torch.get_default_dtype())
+        cell = torch.from_numpy(cell).view(1, 3, 3).to(torch.get_default_dtype())
         natoms = positions.shape[0]
 
         # initialized to torch.zeros(natoms) if tags missing.
