@@ -125,6 +125,7 @@ class OCPCalculator(Calculator):
         seed: int | None = None,
         only_output: list[str] | None = None,
         disable_amp: bool = True,
+        dtype: str = "float32",
     ) -> None:
         """
         OCP-ASE Calculator
@@ -150,6 +151,8 @@ class OCPCalculator(Calculator):
             disable_amp (bool):
                 Disable AMP in the calculator; AMP on is great for training, but often leads to headaches
                 during inference.
+            dtype (str):
+                The data type of the model. Can be float16, float32 or float64. Default is float32.
         """
         setup_imports()
         setup_logging()
@@ -273,6 +276,25 @@ class OCPCalculator(Calculator):
         )
         self.implemented_properties = list(self.config["outputs"].keys())
 
+        if dtype == "float64":
+            self.trainer.model = self.trainer.model.double()
+            self.dtype = torch.float64
+            torch.set_default_dtype(torch.float64)
+            # use math sdp for float64
+            torch.backends.cuda.enable_math_sdp(True)
+            torch.backends.cuda.enable_flash_sdp(False)
+            torch.backends.cuda.enable_mem_efficient_sdp(False)
+        elif dtype == "float32":
+            self.trainer.model = self.trainer.model.float()
+            self.dtype = torch.float32
+            torch.set_default_dtype(torch.float32)
+        elif dtype == "float16":
+            self.trainer.model = self.trainer.model.half()
+            self.dtype = torch.float16
+            torch.set_default_dtype(torch.float16)
+        else:
+            raise ValueError(f"Invalid dtype: {dtype}")
+
     def load_checkpoint(
         self, checkpoint_path: str, checkpoint: dict | None = None
     ) -> None:
@@ -309,3 +331,6 @@ class OCPCalculator(Calculator):
             if key in OCPCalculator._reshaped_props:
                 _pred = _pred.reshape(OCPCalculator._reshaped_props.get(key)).squeeze()
             self.results[key] = _pred
+
+        # Set the free energy to be the same as the energy
+        self.results["free_energy"] = self.results["energy"]
