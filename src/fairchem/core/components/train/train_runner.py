@@ -24,6 +24,7 @@ from fairchem.core.components.runner import Runner
 from fairchem.core.units.mlip_unit.mlip_unit import (
     convert_train_checkpoint_to_inference_checkpoint,
 )
+from fairchem.core._cli import PREEMPTION_STATE_DIR_NAME
 
 if TYPE_CHECKING:
     from torch.distributed.checkpoint.stateful import Stateful
@@ -83,6 +84,8 @@ class TrainCheckpointCallback(Callback):
                 checkpoint_dirs_by_time = get_subdirectories_sorted_by_time(
                     self.checkpoint_dir
                 )
+                if PREEMPTION_STATE_DIR_NAME in checkpoint_dirs_by_time:
+                    checkpoint_dirs_by_time.remove(PREEMPTION_STATE_DIR_NAME)
                 for dir, _ in checkpoint_dirs_by_time[: -self.max_saved_checkpoints]:
                     shutil.rmtree(dir)
 
