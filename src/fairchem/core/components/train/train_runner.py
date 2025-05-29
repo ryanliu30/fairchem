@@ -84,10 +84,9 @@ class TrainCheckpointCallback(Callback):
                 checkpoint_dirs_by_time = get_subdirectories_sorted_by_time(
                     self.checkpoint_dir
                 )
-                if PREEMPTION_STATE_DIR_NAME in checkpoint_dirs_by_time:
-                    checkpoint_dirs_by_time.remove(PREEMPTION_STATE_DIR_NAME)
                 for dir, _ in checkpoint_dirs_by_time[: -self.max_saved_checkpoints]:
-                    shutil.rmtree(dir)
+                    if not dir.endswith(PREEMPTION_STATE_DIR_NAME):
+                        shutil.rmtree(dir)
 
     def on_train_end(self, state: State, unit: TTrainUnit) -> None:
         if self.checkpoint_every_n_steps is not None:
