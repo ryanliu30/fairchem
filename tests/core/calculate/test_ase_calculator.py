@@ -21,6 +21,7 @@ from fairchem.core.calculate.ase_calculator import (
     AllZeroUnitCellError,
     MixedPBCError,
 )
+from fairchem.core.units.mlip_unit.api.inference import UMATask
 
 if TYPE_CHECKING:
     from ase import Atoms
@@ -91,6 +92,40 @@ def large_bulk_atoms() -> Atoms:
     return bulk("Fe", "bcc", a=2.87).repeat((10, 10, 10))  # 10x10x10 unit cell
 
 
+def test_calculator_from_checkpoint():
+    calc = FAIRChemCalculator.from_model_checkpoint(
+        pretrained_mlip.available_models[0], task_name="omol"
+    )
+    assert "energy" in calc.implemented_properties
+    assert "forces" in calc.implemented_properties
+
+
+def test_calculator_with_task_names_matches_uma_task(aperiodic_atoms):
+    calc_omol = FAIRChemCalculator.from_model_checkpoint(
+        pretrained_mlip.available_models[0], task_name="omol"
+    )
+    calc_omol_uma_task = FAIRChemCalculator.from_model_checkpoint(
+        pretrained_mlip.available_models[0], task_name=UMATask.OMOL
+    )
+    calculators = [calc_omol, calc_omol_uma_task]
+    energies = []
+    for calc in calculators:
+        atoms = aperiodic_atoms
+        atoms.calc = calc
+        energy = atoms.get_potential_energy()
+        energies.append(energy)
+    np.testing.assert_allclose(energies[0], energies[1])
+
+
+def test_calculator_unknown_task_raises_error(aperiodic_atoms):
+    with pytest.raises(AssertionError):
+        calc_omol = FAIRChemCalculator.from_model_checkpoint(
+            pretrained_mlip.available_models[0], task_name="ommmmmol"
+        )
+        atoms = aperiodic_atoms
+        atoms.calc = calc_omol
+
+
 @pytest.mark.gpu()
 def test_calculator_setup(all_calculators):
     for calc in all_calculators():
@@ -107,10 +142,6 @@ def test_calculator_setup(all_calculators):
 
         assert all(
             prop in calc.implemented_properties for prop in implemented_properties
-        )
-        assert all(
-            prop in calc.calc_property_to_model_key_mapping
-            for prop in implemented_properties
         )
 
 
@@ -158,7 +189,7 @@ def test_calculator_configurations(inference_settings, slab_atoms):
         torch.compiler.reset()
 
     predict_unit = pretrained_mlip.get_predict_unit(
-        "uma-sm", inference_settings=inference_settings
+        "uma-s-1", inference_settings=inference_settings
     )
     calc = FAIRChemCalculator(
         predict_unit,
@@ -181,7 +212,7 @@ def test_calculator_configurations(inference_settings, slab_atoms):
 @pytest.mark.gpu()
 def test_large_bulk_system(large_bulk_atoms):
     """Test a bulk system with 1000 atoms using the small model."""
-    predict_unit = pretrained_mlip.get_predict_unit("uma-sm", device="cuda")
+    predict_unit = pretrained_mlip.get_predict_unit("uma-s-1", device="cuda")
     calc = FAIRChemCalculator(predict_unit, task_name="omat")
     large_bulk_atoms.calc = calc
 
@@ -285,7 +316,7 @@ def test_random_seed_final_energy():
     results_by_seed = {}
 
     calc = FAIRChemCalculator(
-        pretrained_mlip.get_predict_unit("uma-sm"),
+        pretrained_mlip.get_predict_unit("uma-s-1"),
         task_name="omat",
     )
 

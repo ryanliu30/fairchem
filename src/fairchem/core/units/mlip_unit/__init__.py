@@ -7,13 +7,16 @@ file in the root directory of this source tree.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+import logging
+from typing import TYPE_CHECKING, Literal
+
+import torch
 
 from fairchem.core.units.mlip_unit.api.inference import (
     InferenceSettings,
     guess_inference_settings,
 )
-from fairchem.core.units.mlip_unit.mlip_unit import MLIPPredictUnit
+from fairchem.core.units.mlip_unit.predict import MLIPPredictUnit
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -23,7 +26,7 @@ def load_predict_unit(
     path: str | Path,
     inference_settings: InferenceSettings | str = "default",
     overrides: dict | None = None,
-    device: str = "cuda",
+    device: Literal["cuda", "cpu"] | None = None,
 ) -> MLIPPredictUnit:
     """Load a MLIPPredictUnit from a checkpoint file.
 
@@ -38,6 +41,11 @@ def load_predict_unit(
     Returns:
         A MLIPPredictUnit instance ready for inference
     """
+
+    if device is None:
+        device = "cuda" if torch.cuda.is_available() else "cpu"
+        logging.warning(f"device was not explicitly set, using {device=}.")
+
     inference_settings = guess_inference_settings(inference_settings)
     overrides = overrides or {"backbone": {"always_use_pbc": False}}
 
@@ -45,5 +53,5 @@ def load_predict_unit(
         path,
         device=device,
         inference_settings=inference_settings,
-        overrides={"backbone": {"always_use_pbc": False}},
+        overrides=overrides,
     )

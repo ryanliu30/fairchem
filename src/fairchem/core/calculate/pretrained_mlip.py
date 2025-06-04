@@ -16,10 +16,10 @@ from huggingface_hub import hf_hub_download
 
 from fairchem.core import calculate
 from fairchem.core._config import CACHE_DIR
-from fairchem.core.units.mlip_unit import load_predict_unit
+from fairchem.core.units.mlip_unit import MLIPPredictUnit, load_predict_unit
 
 if TYPE_CHECKING:
-    from fairchem.core.units.mlip_unit import InferenceSettings, MLIPPredictUnit
+    from fairchem.core.units.mlip_unit import InferenceSettings
 
 
 @dataclass
@@ -50,7 +50,7 @@ def get_predict_unit(
     model_name: str,
     inference_settings: InferenceSettings | str = "default",
     overrides: dict | None = None,
-    device: str = "cuda",
+    device: Literal["cuda", "cpu"] | None = None,
 ) -> MLIPPredictUnit:
     """
     Retrieves a prediction unit for a specified model.
@@ -69,7 +69,16 @@ def get_predict_unit(
     Raises:
         KeyError: If the specified model_name is not found in available models.
     """
-    model_checkpoint = _MODEL_CKPTS.checkpoints[model_name]
+    if model_name == "uma-sm":
+        raise NotImplementedError(
+            "uma-sm has been renamed to 'uma-s-1', please update and try again."
+        )
+    try:
+        model_checkpoint = _MODEL_CKPTS.checkpoints[model_name]
+    except KeyError as err:
+        raise KeyError(
+            f"Model '{model_name}' not found. Available models: {available_models}"
+        ) from err
     checkpoint_path = hf_hub_download(
         filename=model_checkpoint.filename,
         repo_id=model_checkpoint.repo_id,

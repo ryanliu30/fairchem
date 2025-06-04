@@ -10,6 +10,7 @@
 ![tests](https://github.com/FAIR-Chem/fairchem/actions/workflows/test.yml/badge.svg?branch=main)
 ![PyPI - Version](https://img.shields.io/pypi/v/fairchem-core)
 ![Static Badge](https://img.shields.io/badge/python-3.10%2B-blue)
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.15587498.svg)](https://doi.org/10.5281/zenodo.15587498)
 
 [![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://github.com/codespaces/new/FAIR-Chem/fairchem?quickstart=1)
 
@@ -23,7 +24,7 @@ demos, and application efforts for materials science and quantum chemistry.
 > :warning: Some of the docs and new features in FAIRChem version 2 are still being updated so you may see some changes over the next few weeks. Check back here for the latest instructions. Thank you for your patience!
 
 ### Read our latest release post!
-Read about the [UMA model and dataset](https://ai.meta.com/blog/meta-fair-science-new-open-source-releases/) release.
+Read about the [UMA model and OMOL25 dataset](https://ai.meta.com/blog/meta-fair-science-new-open-source-releases/) release.
 
 [![Meta FAIR Science Release](https://github.com/user-attachments/assets/acddd09b-ed6f-4d05-9a4b-9ba5e2301150)](https://ai.meta.com/blog/meta-fair-science-new-open-source-releases/?ref=shareable)
 
@@ -63,13 +64,13 @@ huggingface-cli login
 - **odac:** use this for MOFs
 - **omc:** use this for molecular crystals
 
-Relax an adsorbate on a catalytic surface,
+##### Relax an adsorbate on a catalytic surface,
 ```python
 from ase.build import fcc100, add_adsorbate, molecule
 from ase.optimize import LBFGS
 from fairchem.core import pretrained_mlip, FAIRChemCalculator
 
-predictor = pretrained_mlip.get_predict_unit("uma-sm", device="cuda")
+predictor = pretrained_mlip.get_predict_unit("uma-s-1", device="cuda")
 calc = FAIRChemCalculator(predictor, task_name="oc20")
 
 # Set up your system as an ASE atoms object
@@ -84,14 +85,14 @@ opt = LBFGS(slab)
 opt.run(0.05, 100)
 ```
 
-Relax an inorganic crystal,
+##### Relax an inorganic crystal,
 ```python
 from ase.build import bulk
 from ase.optimize import FIRE
 from ase.filters import FrechetCellFilter
 from fairchem.core import pretrained_mlip, FAIRChemCalculator
 
-predictor = pretrained_mlip.get_predict_unit("uma-sm", device="cuda")
+predictor = pretrained_mlip.get_predict_unit("uma-s-1", device="cuda")
 calc = FAIRChemCalculator(predictor, task_name="omat")
 
 atoms = bulk("Fe")
@@ -101,7 +102,7 @@ opt = LBFGS(FrechetCellFilter(atoms))
 opt.run(0.05, 100)
 ```
 
-Run molecular MD,
+##### Run molecular MD,
 ```python
 from ase import units
 from ase.io import Trajectory
@@ -109,7 +110,7 @@ from ase.md.langevin import Langevin
 from ase.build import molecule
 from fairchem.core import pretrained_mlip, FAIRChemCalculator
 
-predictor = pretrained_mlip.get_predict_unit("uma-sm", device="cuda")
+predictor = pretrained_mlip.get_predict_unit("uma-s-1", device="cuda")
 calc = FAIRChemCalculator(predictor, task_name="omol")
 
 atoms = molecule("H2O")
@@ -126,12 +127,12 @@ dyn.attach(trajectory.write, interval=1)
 dyn.run(steps=1000)
 ```
 
-Calculate a spin gap,
+##### Calculate a spin gap,
 ```python
 from ase.build import molecule
 from fairchem.core import pretrained_mlip, FAIRChemCalculator
 
-predictor = pretrained_mlip.get_predict_unit("uma-sm", device="cuda")
+predictor = pretrained_mlip.get_predict_unit("uma-s-1", device="cuda")
 
 #  singlet CH2
 singlet = molecule("CH2_s1A1d")
@@ -176,3 +177,8 @@ calc = OCPCalculator(
 
 ### LICENSE
 `fairchem` is available under a [MIT License](LICENSE.md).
+
+You are welcome to use our code for your own research and development, please use the relevant [Zenodo citation](https://zenodo.org/records/15587498) in your papers. If you are using our models or datasets please cite those in addition to this repo citation.
+```
+Muhammed Shuaibi, Abhishek Das, anuroopsriram, Misko, Luis Barroso-Luque, Ray, Siddharth Goyal, zulissimeta, Brandon Wood, Tian Xie, Junwoong Yoon, Brook Wander, Adeesh Kolluru, Richard Barnes, Ethan Sunshine, Kevin Tran, Xiang, Daniel Levine, Nima Shoghi, … vbttchr. (2025). facebookresearch/fairchem: fairchem-core-2.2.0 (fairchem_core-2.2.0). Zenodo. https://doi.org/10.5281/zenodo.15587498
+```
