@@ -158,7 +158,7 @@ class TrainEvalRunner(Runner):
                     logging.warning(
                         f"Checkpoint location {checkpoint_location} already exists, removing it"
                     )
-                    shutil.rmtree(checkpoint_location)
+                    os.unlink(checkpoint_location)
                 os.symlink(most_recent_checkpoint_path, checkpoint_location)
                 logging.info(
                     f"When the job resumes from preemption, it will be using the state found at {most_recent_checkpoint_path}, which has been symlinked to {checkpoint_location}"
