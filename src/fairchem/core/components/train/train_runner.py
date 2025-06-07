@@ -22,7 +22,7 @@ from fairchem.core.common import distutils
 from fairchem.core.common.utils import get_subdirectories_sorted_by_time
 from fairchem.core.components.runner import Runner
 from fairchem.core.units.mlip_unit.mlip_unit import (
-    convert_train_checkpoint_to_inference_checkpoint
+    convert_train_checkpoint_to_inference_checkpoint,
 )
 
 if TYPE_CHECKING:
