@@ -182,6 +182,12 @@ def asedb_transform(data_object: AtomicData, config) -> AtomicData:
     )
     return data_object
 
+def dens_transform(data_object: AtomicData, config) -> AtomicData:
+    # placeholder for the dens data. must be done after dataloader to ensure consistency
+    # with graph parallelism since per-worker randomness is tricky to sync
+    data_object.dens_noise = torch.zeros_like(data_object.pos)
+    data_object.dens_mask = torch.zeros(data_object.num_graphs, dtype=torch.bool)
+    return data_object
 
 class DataTransforms:
     def __init__(self, config) -> None:

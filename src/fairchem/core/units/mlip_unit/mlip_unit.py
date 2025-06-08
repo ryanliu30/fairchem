@@ -158,7 +158,7 @@ def get_output_mask(batch: AtomicData, task: Task) -> dict[str, torch.Tensor]:
     """
 
     output_masks = {task.name: torch.isfinite(batch[task.name])}
-    if "forces" in task.name:
+    if ("forces" in task.name) or (task.name == "dens_noise"):
         output_masks[task.name] = output_masks[task.name].all(dim=1)
 
     for dset in set(batch.dataset_name):
@@ -256,7 +256,6 @@ def compute_loss(
     # Sanity check to make sure the compute graph is correct.
     for lc in loss_dict.values():
         assert hasattr(lc, "grad_fn")
-
     return loss_dict
 
 
