@@ -91,6 +91,15 @@ class SlurmConfig:
     account: Optional[str] = (
         None  # omegaconf in python 3.9 does not backport annotations
     )
+    nodelist: Optional[str] = (
+        None  # omegaconf in python 3.9 does not backport annotations
+    )
+    constraint: Optional[str] = (
+        None  # omegaconf in python 3.9 does not backport annotations
+    )
+    exclude: Optional[str] = (
+        None  # omegaconf in python 3.9 does not backport annotations
+    )
 
 
 @dataclass
