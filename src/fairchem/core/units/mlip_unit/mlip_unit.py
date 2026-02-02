@@ -137,11 +137,6 @@ def convert_train_checkpoint_to_inference_checkpoint(
 
 
 def initialize_finetuning_model(
-<<<<<<< HEAD
-    checkpoint_location: str, overrides: dict | None = None, heads: dict | None = None, strict: bool = True
-) -> torch.nn.Module:
-    model, checkpoint = load_inference_model(checkpoint_location, overrides, strict=strict)
-=======
     checkpoint_location: str,
     overrides: dict | None = None,
     heads: dict | None = None,
@@ -150,7 +145,6 @@ def initialize_finetuning_model(
     model, checkpoint = load_inference_model(
         checkpoint_location, overrides, strict=strict
     )
->>>>>>> 559a822361219a7be973cad73a90327377f274a6
 
     logging.warning(
         f"initialize_finetuning_model starting from checkpoint_location: {checkpoint_location}"
