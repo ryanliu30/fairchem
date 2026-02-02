@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import logging
 import os
+from collections import Counter
 from functools import partial
 from typing import TYPE_CHECKING, Literal
 
@@ -17,7 +18,6 @@ from ase.calculators.calculator import Calculator
 from ase.stress import full_3x3_to_voigt_6_stress
 
 from fairchem.core.calculate import pretrained_mlip
-from fairchem.core.datasets import data_list_collater
 from fairchem.core.datasets.atomic_data import AtomicData
 from fairchem.core.units.mlip_unit.api.inference import (
     CHARGE_RANGE,
@@ -40,7 +40,7 @@ class FAIRChemCalculator(Calculator):
         self,
         predict_unit: MLIPPredictUnit,
         task_name: UMATask | str | None = None,
-        seed: int = 41,
+        seed: int | None = None,  # deprecated
     ):
         """
         Initialize the FAIRChemCalculator from a model MLIPPredictUnit
@@ -50,7 +50,6 @@ class FAIRChemCalculator(Calculator):
             task_name (UMATask or str, optional): Name of the task to use if using a UMA checkpoint.
                 Determines default key names for energy, forces, and stress.
                 Can be one of 'omol', 'omat', 'oc20', 'odac', or 'omc'.
-            seed (int, optional): Random seed for reproducibility. Defaults to 42.
         Notes:
             - For models that require total charge and spin multiplicity (currently UMA models on omol mode), `charge`
               and `spin` (corresponding to `spin_multiplicity`) are pulled from `atoms.info` during calculations.
@@ -62,31 +61,26 @@ class FAIRChemCalculator(Calculator):
 
         super().__init__()
 
-        # check that external graph gen is not set!
-        if predict_unit.inference_mode.external_graph_gen is not False:
-            raise RuntimeError(
-                "FAIRChemCalculator can only be used with external_graph_gen False inference settings."
-            )
-
-        if predict_unit.model.module.backbone.direct_forces:
+        if seed is not None:
             logging.warning(
-                "This is a direct-force model. Direct force predictions may lead to discontinuities in the potential "
-                "energy surface and energy conservation errors."
+                "The 'seed' argument is deprecated and will be removed in future versions. "
+                "Please set the seed in the MLIPPredictUnit configuration instead."
             )
 
         if isinstance(task_name, UMATask):
             task_name = task_name.value
 
+        valid_datasets = list(predict_unit.dataset_to_tasks.keys())
         if task_name is not None:
             assert (
-                task_name in predict_unit.datasets
-            ), f"Given: {task_name}, Valid options are {predict_unit.datasets}"
-            self._task_name = task_name
-        elif len(predict_unit.datasets) == 1:
-            self._task_name = predict_unit.datasets[0]
+                task_name in valid_datasets
+            ), f"Given: {task_name}, Valid options are {valid_datasets}"
+            self._task = UMATask(task_name)
+        elif len(valid_datasets) == 1:
+            self._task = UMATask(valid_datasets[0])
         else:
             raise RuntimeError(
-                f"A task name must be provided. Valid options are {predict_unit.datasets}"
+                f"A task name must be provided. Valid options are {valid_datasets}"
             )
 
         self.implemented_properties = [
@@ -98,16 +92,31 @@ class FAIRChemCalculator(Calculator):
             )  # Free energy is a copy of energy, see docstring above
 
         self.predictor = predict_unit
-        self.predictor.seed(seed)
+
+        if predict_unit.inference_settings.external_graph_gen is True:
+            r_edges = True
+            max_neigh = 300
+            radius = 6.0  # Default radius for edge generation
+            logging.warning(
+                "External graph generation is enabled, limiting neighbors to 300."
+            )
+        else:
+            r_edges = False
+            max_neigh = None
+            radius = 6.0  # Still need radius even for internal graph gen
 
         self.a2g = partial(
             AtomicData.from_ase,
-            max_neigh=self.predictor.model.module.backbone.max_neighbors,
-            radius=self.predictor.model.module.backbone.cutoff,
             task_name=self.task_name,
-            r_edges=False,
+            r_edges=r_edges,
             r_data_keys=["spin", "charge"],
+            max_neigh=max_neigh,
+            radius=radius,
         )
+
+    @property
+    def task_name(self) -> str:
+        return self._task.value
 
     @classmethod
     def from_model_checkpoint(
@@ -131,7 +140,7 @@ class FAIRChemCalculator(Calculator):
                 use a custom InferenceSettings object.
             overrides: Optional dictionary of settings to override default inference settings.
             device: Optional torch device to load the model onto.
-            seed: Random seed for reproducibility. Defaults to 41.
+            seed: Random seed for reproducibility.
         """
 
         if name_or_path in pretrained_mlip.available_models:
@@ -153,10 +162,6 @@ class FAIRChemCalculator(Calculator):
                 f"{name_or_path=} is not a valid model name or checkpoint path"
             )
         return cls(predict_unit=predict_unit, task_name=task_name, seed=seed)
-
-    @property
-    def task_name(self) -> str:
-        return self._task_name
 
     def check_state(self, atoms: Atoms, tol: float = 1e-15) -> list:
         """
@@ -211,11 +216,10 @@ class FAIRChemCalculator(Calculator):
             self.results = self._get_single_atom_energies(atoms)
         else:
             # Convert using the current a2g object
-            data_object = self.a2g(atoms)
+            data = self.a2g(atoms)
 
             # Batch and predict
-            batch = data_list_collater([data_object], otf_graph=True)
-            pred = self.predictor.predict(batch)
+            pred = self.predictor.predict(data)
 
             # Collect the results into self.results
             self.results = {}
@@ -304,7 +308,7 @@ class FAIRChemCalculator(Calculator):
 
         # Validate charge
         charge = atoms.info["charge"]
-        if not isinstance(charge, int):
+        if not isinstance(charge, (int, np.integer)):
             raise TypeError(
                 f"Invalid type for charge: {type(charge)}. Charge must be an integer representing the total charge on the system."
             )
@@ -315,7 +319,7 @@ class FAIRChemCalculator(Calculator):
 
         # Validate spin
         spin = atoms.info["spin"]
-        if not isinstance(spin, int):
+        if not isinstance(charge, (int, np.integer)):
             raise TypeError(
                 f"Invalid type for spin: {type(spin)}. Spin must be an integer representing the spin multiplicity."
             )
@@ -323,6 +327,119 @@ class FAIRChemCalculator(Calculator):
             raise ValueError(
                 f"Invalid value for spin: {spin}. Spin must be within the range {SPIN_RANGE[0]} to {SPIN_RANGE[1]}."
             )
+
+
+class FormationEnergyCalculator(Calculator):
+    def __init__(
+        self,
+        calculator: Calculator,
+        element_references: dict | None = None,
+        apply_corrections: bool | None = None,
+        correction_type: Literal["MP2020", "OMat24"] = "OMat24",
+    ):
+        """
+        A calculator wrapper that computes formation energies.
+
+        Args:
+            calculator (Calculator): The base calculator to wrap.
+            element_references (dict, optional): Dictionary of formation reference energies for each element.
+                If None and calculator is FAIRChemCalculator, uses default references from the predictor.
+            apply_corrections (bool, optional): Whether to apply MP style corrections to formation energies.
+                Only relevant for OMat task. Defaults to True for OMat task if calculator is FAIRChemCalculator.
+            correction_type (Literal["MP2020", "OMat24"], optional): Type of corrections to apply. Defaults to "OMat24".
+        """
+        super().__init__()
+        self.calculator = calculator
+
+        if element_references is None:
+            if isinstance(calculator, FAIRChemCalculator):
+                element_references = calculator.predictor.form_elem_refs[
+                    calculator.task_name
+                ]
+            else:
+                raise ValueError("element_references must be provided")
+        self.element_references = element_references
+
+        if apply_corrections is True:
+            if isinstance(calculator, FAIRChemCalculator):
+                if calculator.task_name != UMATask.OMAT.value:
+                    raise ValueError(
+                        "MP style corrections can only be applied for the OMat task."
+                    )
+            else:
+                logging.warning(
+                    "apply_corrections=True specified for non-FAIRChemCalculator. "
+                    "Corrections will be attempted."
+                )
+
+        if (
+            apply_corrections is None
+            and isinstance(calculator, FAIRChemCalculator)
+            and calculator.task_name == UMATask.OMAT.value
+        ):
+            apply_corrections = True
+
+        self.apply_corrections = (
+            apply_corrections if apply_corrections is not None else False
+        )
+        self._correction_type = correction_type
+
+        if hasattr(calculator, "implemented_properties"):
+            self.implemented_properties = calculator.implemented_properties
+
+    def calculate(
+        self, atoms: Atoms, properties: list[str], system_changes: list[str]
+    ) -> None:
+        """
+        Calculate formation energy by wrapping the base calculator.
+
+        Args:
+            atoms (Atoms): The atomic structure to calculate properties for.
+            properties (list[str]): The list of properties to calculate.
+            system_changes (list[str]): The list of changes in the system.
+        """
+        self.calculator.calculate(atoms, properties, system_changes)
+
+        self.results = self.calculator.results.copy()
+
+        if "energy" in self.results:
+            total_energy = self.results["energy"]
+
+            if self.apply_corrections:
+                try:
+                    from fairchem.data.omat.entries.compatibility import (
+                        apply_mp_style_corrections,
+                    )
+                except ImportError as err:
+                    raise ImportError(
+                        "fairchem.data.omat is required to apply MP style corrections. Please install it."
+                    ) from err
+                total_energy = apply_mp_style_corrections(
+                    total_energy, atoms, correction_type=self._correction_type
+                )
+
+            element_symbols = atoms.get_chemical_symbols()
+            element_counts = Counter(element_symbols)
+
+            missing_elements = set(element_symbols) - set(
+                self.element_references.keys()
+            )
+            if missing_elements:
+                raise ValueError(
+                    f"Missing reference energies for elements: {missing_elements}"
+                )
+
+            total_ref_energy = sum(
+                self.element_references[element] * count
+                for element, count in element_counts.items()
+            )
+
+            formation_energy = total_energy - total_ref_energy
+
+            self.results["energy"] = formation_energy
+
+            if "free_energy" in self.results:
+                self.results["free_energy"] = formation_energy
 
 
 class MixedPBCError(ValueError):

@@ -22,7 +22,16 @@ from ase.calculators.singlepoint import SinglePointCalculator, SinglePointDFTCal
 from ase.constraints import FixAtoms
 from ase.geometry import wrap_positions
 from ase.stress import full_3x3_to_voigt_6_stress, voigt_6_to_full_3x3_stress
-from pymatgen.io.ase import AseAtomsAdaptor
+from monty.dev import requires
+
+try:
+    from pymatgen.io.ase import AseAtomsAdaptor
+
+    pmg_installed = True
+except ImportError:
+    AseAtomsAdaptor = None
+    pmg_installed = False
+
 
 IndexType = Union[slice, torch.Tensor, np.ndarray, Sequence]
 
@@ -68,14 +77,10 @@ def size_repr(key: str, item: torch.Tensor, indent=0) -> str:
     return f"{indent_str}{key}={out}"
 
 
+@requires(pmg_installed, message="Requires `pymatgen` to be installed")
 def get_neighbors_pymatgen(atoms: ase.Atoms, cutoff, max_neigh):
-    """Preforms nearest neighbor search and returns edge index, distances,
+    """Performs nearest neighbor search and returns edge index, distances,
     and cell offsets"""
-    if AseAtomsAdaptor is None:
-        raise RuntimeError(
-            "Unable to import pymatgen.io.ase.AseAtomsAdaptor. Make sure pymatgen is properly installed."
-        )
-
     struct = AseAtomsAdaptor.get_structure(atoms)
 
     # tol of 1e-8 should remove all self loops
@@ -160,8 +165,16 @@ class AtomicData:
         self.tags = tags
         self.sid = sid if sid is not None else [""]
 
+        # Always normalize dataset to a list for consistent batching
         if dataset is not None:
-            self.dataset = dataset
+            if isinstance(dataset, str):
+                self.dataset = [dataset]
+            elif isinstance(dataset, list):
+                self.dataset = dataset
+            else:
+                raise ValueError(
+                    f"dataset must be a string or list of strings, got {type(dataset)}"
+                )
 
         # tagets
         if energy is not None:
@@ -237,11 +250,8 @@ class AtomicData:
         assert len(self.sid) == self.num_graphs
 
         if "dataset" in self.__keys__:
-            if isinstance(self.dataset, list):
-                assert len(self.dataset) == self.num_graphs
-            else:
-                assert isinstance(self.dataset, str)
-                assert self.num_graphs == 1
+            assert isinstance(self.dataset, list), "dataset must always be a list"
+            assert len(self.dataset) == self.num_graphs
 
         # dtype checks
         assert (
@@ -451,24 +461,24 @@ class AtomicData:
         assert self.num_graphs == 1, "Data object must contain a single graph."
 
         atoms = ase.Atoms(
-            numbers=self.atomic_numbers.numpy(),
-            positions=self.pos.numpy(),
-            cell=self.cell.squeeze().numpy(),
+            numbers=self.atomic_numbers.cpu().numpy(),
+            positions=self.pos.cpu().numpy(),
+            cell=self.cell.squeeze().cpu().numpy(),
             pbc=self.pbc.squeeze().tolist(),
             constraint=FixAtoms(mask=self.fixed.bool().tolist()),
-            tags=self.tags.numpy(),
+            tags=self.tags.cpu().numpy(),
         )
 
         if self.__keys__.intersection(["energy", "forces", "stress"]):
             fields = {}
-            if self.energy is not None:
-                fields["energy"] = self.energy.numpy()
-            if self.forces is not None:
-                fields["forces"] = self.forces.numpy()
-            if self.stress is not None:
+            if hasattr(self, "energy") and self.energy is not None:
+                fields["energy"] = self.energy.cpu().numpy()
+            if hasattr(self, "forces") and self.forces is not None:
+                fields["forces"] = self.forces.cpu().numpy()
+            if hasattr(self, "stress") and self.stress is not None:
                 if self.stress.shape == (3, 3):
                     fields["stress"] = full_3x3_to_voigt_6_stress(
-                        self.stress.squeeze().numpy()
+                        self.stress.squeeze().cpu().numpy()
                     )
                 elif self.stress.shape == (6,):
                     fields["stress"] = self.stress.squeeze().numpy()
@@ -787,6 +797,27 @@ class AtomicData:
         order to be able to reconstruct the initial objects."""
         return [self.get_example(i) for i in range(self.num_graphs)]
 
+    def update_batch_edges(
+        self, edge_index: torch.Tensor, cell_offsets: torch.Tensor, nedges: torch.Tensor
+    ) -> AtomicData:
+        r"""Update the connectivity of each batched AtomicData sample.
+
+        Args:
+            edge_index (torch.Tensor): New batch edge_index (shape [2, total_edges]).
+            cell_offsets (torch.Tensor): Cell offsets per edge (shape [total_edges, 3]).
+            nedges (torch.Tensor): Number of edges per system (shape [num_systems]).
+
+        Returns:
+            AtomicData: The updated batch object.
+        """
+        self.edge_index = edge_index
+        self.cell_offsets = cell_offsets
+        self.nedges = nedges
+        edge_slices = [0] + torch.cumsum(nedges, dim=0).tolist()
+        self.__slices__["edge_index"] = edge_slices
+        self.__slices__["cell_offsets"] = edge_slices
+        return self
+
 
 def atomicdata_list_to_batch(
     data_list: list[AtomicData], exclude_keys: Optional[list] = None
@@ -869,7 +900,15 @@ def atomicdata_list_to_batch(
         # TODO: this allows non-tensor fields to be batched.
         # we might want to remove support for that.
         else:
-            batched_data_dict[key] = items
+            # For list attributes, flatten nested lists to maintain consistency
+            # This handles cases where already-batched data is re-batched
+            if items and all(isinstance(item, list) for item in items):
+                flattened = []
+                for item in items:
+                    flattened.extend(item)
+                batched_data_dict[key] = flattened
+            else:
+                batched_data_dict[key] = items
 
     batched_data_dict["batch"] = torch.cat(batch, dim=-1)
     batched_data_dict["sid"] = sid_list
